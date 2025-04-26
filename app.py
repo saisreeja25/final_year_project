@@ -89,7 +89,7 @@ def main_page():
             st.session_state.logged_in = False
             del st.session_state.username
             st.success("Logged out successfully!")
-            st.experimental_rerun()  # Reload the page
+            #st.experimental_rerun()  # Reload the page
 
         st.header('Main Content')
 
@@ -116,7 +116,7 @@ def register_page():
             st.success(f"User {username} registered successfully!")
             st.session_state.logged_in = True
             st.session_state.username = username
-            st.experimental_rerun()  # Reload the page
+            #st.experimental_rerun()  # Reload the page
         else:
             st.error(f"User {username} already exists!")
 
