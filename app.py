@@ -218,6 +218,8 @@ def train_page():
         )
 
 # --- Prediction Page ---def prediction_page():
+from sklearn.preprocessing import LabelEncoder
+
 def prediction_page():
     st.subheader('Make Prediction')
 
@@ -240,8 +242,24 @@ def prediction_page():
 
     input_data = np.array([sex, age, grade, histological_type, mskcc_type, site_of_primary, treatment])
 
-    # Preprocess the input data
-    input_data = input_data.reshape(1, -1)  # Reshape it to 2D for the scaler
+    # Encode categorical features into numerical values
+    label_encoder_sex = LabelEncoder()
+    label_encoder_grade = LabelEncoder()
+    label_encoder_histological_type = LabelEncoder()
+    label_encoder_mskcc_type = LabelEncoder()
+    label_encoder_site_of_primary = LabelEncoder()
+    label_encoder_treatment = LabelEncoder()
+
+    # Fit label encoder on all possible values for each column and transform the input data
+    input_data[0] = label_encoder_sex.fit_transform([sex])[0]
+    input_data[2] = label_encoder_grade.fit_transform([grade])[0]
+    input_data[3] = label_encoder_histological_type.fit_transform([histological_type])[0]
+    input_data[4] = label_encoder_mskcc_type.fit_transform([mskcc_type])[0]
+    input_data[5] = label_encoder_site_of_primary.fit_transform([site_of_primary])[0]
+    input_data[6] = label_encoder_treatment.fit_transform([treatment])[0]
+
+    # Reshape to 2D for the scaler
+    input_data = input_data.reshape(1, -1)
 
     # Scale the input data
     input_data = scaler.transform(input_data)
