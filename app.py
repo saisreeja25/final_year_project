@@ -218,7 +218,7 @@ def train_page():
         )
 
 # --- Prediction Page ---def prediction_page():
- def prediction_page():
+def prediction_page():
     st.subheader('Make Prediction')
 
     # Load models
