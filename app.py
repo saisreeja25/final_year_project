@@ -15,6 +15,9 @@ from tensorflow.keras.models import load_model
 
 import joblib
 
+# Function to load the label encoder
+def load_label_encoder():
+    return joblib.load('label_encoder.pkl')
 # Function to load the feature columns
 def load_feature_columns():
     return joblib.load('input_columns.pkl')  # Load the feature columns from a pickle file
