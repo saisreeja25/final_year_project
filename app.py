@@ -143,7 +143,10 @@ def train_page():
     st.subheader('Train a Model')
 
     # Upload dataset
-    file = st.file_uploader("Upload CSV dataset", type="csv")
+    file = "Bone Tumour Dataset.csv"  # Specify your local file path
+
+    # Load the dataset
+    data = pd.read_csv(dataset_path)
     
     if file is not None:
         df = pd.read_csv(file)
