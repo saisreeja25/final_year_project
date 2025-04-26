@@ -12,7 +12,7 @@ from sklearn.preprocessing import LabelEncoder
 # Configuration
 # -------------------------
 
-MODEL_DIR = 'models'
+MODEL_DIR = ''
 USER_RECORD_DIR = 'user_records'
 CREDENTIALS_FILE = 'credentials.csv'
 label_encoder = LabelEncoder()
