@@ -8,8 +8,8 @@ import os
 
 # Load the models and scalers
 models = {
-    'Simple ANN': joblib.load('Simple_ANN_model.pkl'),
-    'Deep ANN': joblib.load('Deep_ANN_model.pkl'),
+    'Simple ANN': joblib.load('Simple ANN_model.pkl'),
+    'Deep ANN': joblib.load('Deep ANN_model.pkl'),
     'CNN': joblib.load('CNN_model.pkl'),
     'LSTM': joblib.load('LSTM_model.pkl')
 }
