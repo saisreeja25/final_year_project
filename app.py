@@ -12,10 +12,16 @@ from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.models import load_model
 
 # Function to load pre-trained models
+
+import joblib
+
+# Function to load the feature columns
+def load_feature_columns():
+    return joblib.load('input_columns.pkl')  # Load the feature columns from a pickle file
+
 def load_models():
     models = {
         'Simple ANN': load_model('Simple ANN1_model.h5'),
-        'Deep ANN': load_model('Deep ANN1_model.h5'),
         'CNN': load_model('CNN1_model.h5'),
         'LSTM': load_model('LSTM1_model.h5')
     }
@@ -107,8 +113,8 @@ def train_page():
         # Define model based on selected choice
         if model_choice == 'Simple ANN':
             model = build_simple_ann(X_train.shape[1])
-        elif model_choice == 'Deep ANN':
-            model = build_deep_ann(X_train.shape[1])
+        '''elif model_choice == 'Deep ANN':
+            model = build_deep_ann(X_train.shape[1])'''
         elif model_choice == 'CNN':
             model = build_cnn(X_train.shape[1])
         elif model_choice == 'LSTM':
