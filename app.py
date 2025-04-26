@@ -10,26 +10,18 @@ from sklearn.preprocessing import StandardScaler
 # --- Functions for Model Loading and Prediction ---
 def load_models():
     models = {
-        'Simple ANN': load_model('Simple ANN_model.h5'),
-        'Deep ANN': load_model('Deep ANN_model.h5'),
-        'CNN': load_model('CNN_model.h5'),
-        'LSTM': load_model('LSTM_model.h5')
+        'Simple ANN': load_model('Simple ANN1_model.h5'),
+        'Deep ANN': load_model('Deep ANN1_model.h5'),
+        'CNN': load_model('CNN1_model.h5'),
+        'LSTM': load_model('LSTM1_model.h5')
     }
     return models
 
 def load_feature_columns():
-    if os.path.exists('input_columns.pkl'):
-        return joblib.load('input_columns.pkl')
-    else:
-        st.error("Missing 'input_columns.pkl'. Please create it with the correct feature columns.")
-        return []
+    return joblib.load('input_columns.pkl')
 
 def load_label_encoder():
-    if os.path.exists('label_encoder.pkl'):
-        return joblib.load('label_encoder.pkl')
-    else:
-        st.error("Missing 'label_encoder.pkl'. Please create it with the correct label encoding.")
-        return None
+    return joblib.load('label_encoder.pkl')
 
 def preprocess_user_input(user_input, full_columns, scaler):
     categorical_cols = ['Sex', 'Grade', 'Histological type', 'MSKCC type', 'Site of primary STS', 'Treatment']
@@ -80,7 +72,7 @@ def main_page():
     label_encoder = load_label_encoder()
     
     # Load scaler for Age column scaling
-    scaler = joblib.load('scaler.pkl') if os.path.exists('scaler.pkl') else None
+    scaler = joblib.load('scaler.pkl')
 
     st.sidebar.title('Login / Register')
     page = st.sidebar.radio('Choose Page:', ['Login', 'Register'])
@@ -140,13 +132,9 @@ def user_input_form(models, full_columns, label_encoder, scaler, username):
         st.subheader(f'Prediction: {decoded_prediction[0]}')
 
         # Save the user's prediction to user records
-        if os.path.exists('user_records.csv'):
-            user_records = pd.read_csv('user_records.csv')
-        else:
-            user_records = pd.DataFrame(columns=list(user_input.keys()) + ['Prediction', 'username'])
-
+        user_records = pd.read_csv('user_records.csv')
         user_input['Prediction'] = decoded_prediction[0]
-        user_input['username'] = username
+        user_input['username'] = username  # Store the actual logged-in user
         user_records = user_records.append(user_input, ignore_index=True)
         user_records.to_csv('user_records.csv', index=False)
 
