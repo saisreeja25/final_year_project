@@ -16,7 +16,7 @@ def load_models():
     try:
         models = {
             'Simple ANN': load_model('Simple ANN1_model.h5'),
-            'Deep ANN': load_model('Deep ANN1_model.h5'),
+            'Deep ANN': load_model('Deep ANN_model.h5'),
             'CNN': load_model('CNN_model.h5'),
             'LSTM': load_model('LSTM_model.h5')
         }
@@ -197,10 +197,10 @@ def train_page():
     if file is not None:
         df = pd.read_csv(file)
         st.write(df.head())
-
+        df.drop('Patient ID', axis=1, inplace=True)
         # Preprocess dataset
-        X = df.drop(columns=['Target'])  # Assuming 'Target' column as the label column
-        y = df['Target']
+        X = df.drop(columns=['Status (NED, AWD, D)',])  # Assuming 'Target' column as the label column
+        y = df['Status (NED, AWD, D)']
 
         # Encode categorical features
         categorical_cols = X.select_dtypes(include=['object']).columns
