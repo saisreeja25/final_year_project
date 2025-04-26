@@ -12,11 +12,10 @@ from sklearn.preprocessing import LabelEncoder
 # Configuration
 # -------------------------
 
-MODEL_DIR = ''
-USER_RECORD_DIR = 'user_records'
 CREDENTIALS_FILE = 'credentials.csv'
+USER_RECORDS_FILE = 'user_records.csv'
 label_encoder = LabelEncoder()
-label_encoder.classes_ = np.array(['AWD', 'D', 'NED'])  # Set your target classes manually
+label_encoder.classes_ = np.array(['AWD', 'D', 'NED'])  # Set manually
 
 # -------------------------
 # Authentication Functions
@@ -34,19 +33,18 @@ def check_login(username, password):
     return not user.empty
 
 def save_record(username, input_data, prediction):
-    user_folder = os.path.join(USER_RECORD_DIR, username)
-    os.makedirs(user_folder, exist_ok=True)
-    record_file = os.path.join(user_folder, 'record.csv')
+    record = input_data.copy()
+    record['Prediction'] = prediction
+    record['Username'] = username
+    record['Timestamp'] = datetime.now()
 
-    df = pd.DataFrame([input_data])
-    df['Prediction'] = prediction
-    df['Timestamp'] = datetime.now()
+    if os.path.exists(USER_RECORDS_FILE):
+        df = pd.read_csv(USER_RECORDS_FILE)
+        df = pd.concat([df, pd.DataFrame([record])], ignore_index=True)
+    else:
+        df = pd.DataFrame([record])
 
-    if os.path.exists(record_file):
-        existing = pd.read_csv(record_file)
-        df = pd.concat([existing, df], ignore_index=True)
-    
-    df.to_csv(record_file, index=False)
+    df.to_csv(USER_RECORDS_FILE, index=False)
 
 # -------------------------
 # Model Loading
@@ -54,8 +52,7 @@ def save_record(username, input_data, prediction):
 
 @st.cache_resource
 def load_model_file(model_name):
-    model_path = os.path.join(MODEL_DIR, model_name)
-    return load_model(model_path)
+    return load_model(model_name)
 
 # -------------------------
 # UI Components
@@ -115,12 +112,12 @@ def main_page():
             'Treatment': treatment
         }
 
-        # Prepare input for model
+        # Prepare input
         input_df = pd.DataFrame([input_data])
 
         # One-hot encoding
         input_encoded = pd.get_dummies(input_df)
-        full_columns = joblib.load('models/input_columns.pkl')  # Pre-saved during training
+        full_columns = joblib.load('input_columns.pkl')  # Now simple file here
         input_encoded = input_encoded.reindex(columns=full_columns, fill_value=0)
 
         X_input = input_encoded.values.astype(np.float32)
