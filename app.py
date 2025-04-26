@@ -24,7 +24,7 @@ def load_feature_columns():
 
 def load_models():
     models = {
-        'Simple ANN': load_model('Simple ANN1_model.h5'),
+        'Simple ANN': load_model('Simple ANN_model.h5'),
         'CNN': load_model('CNN1_model.h5'),
         'LSTM': load_model('LSTM1_model.h5')
     }
