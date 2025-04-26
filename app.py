@@ -224,63 +224,77 @@ from sklearn.preprocessing import LabelEncoder
 def prediction_page():
     st.subheader('Make Prediction')
 
-    # Load models
+    # Load models and other components
     models = load_models()
+    full_columns = load_feature_columns()  # Should return a list of all features your model expects
+    feature_encoders = load_feature_encoders()  # Dictionary of LabelEncoders for each feature
+    target_encoder = load_label_encoder()       # LabelEncoder for target labels
+    scaler = joblib.load('scaler.pkl')
 
-    # Load other components like columns, label encoder, etc.
-    full_columns = load_feature_columns()  # Define or load the full feature columns
-    label_encoder = load_label_encoder()  # Load label encoder
-    scaler = joblib.load('scaler.pkl')  # Load the scaler for Age column scaling
-
-    # User input for prediction
+    # User input
     sex = st.selectbox('Sex', ['Male', 'Female'])
     age = st.number_input('Age', min_value=0, max_value=120)
     grade = st.selectbox('Grade', ['Intermediate', 'High'])
-    histological_type = st.selectbox('Histological Type', ['pleiomorphic leiomyosarcoma', 'malignant solitary fibrous tumor', 'sclerosing epithelioid fibrosarcoma', 'myxoid fibrosarcoma', 'undifferentiated - pleiomorphic', 'synovial sarcoma', 'undifferentiated pleomorphic liposarcoma', 'epithelioid sarcoma', 'poorly differentiated synovial sarcoma', 'pleiomorphic spindle cell undifferentiated', 'pleomorphic sarcoma', 'myxofibrosarcoma', 'leiomyosarcoma'])
+    histological_type = st.selectbox('Histological Type', [
+        'pleiomorphic leiomyosarcoma', 'malignant solitary fibrous tumor', 
+        'sclerosing epithelioid fibrosarcoma', 'myxoid fibrosarcoma', 
+        'undifferentiated - pleiomorphic', 'synovial sarcoma', 
+        'undifferentiated pleomorphic liposarcoma', 'epithelioid sarcoma',
+        'poorly differentiated synovial sarcoma', 'pleiomorphic spindle cell undifferentiated',
+        'pleomorphic sarcoma', 'myxofibrosarcoma', 'leiomyosarcoma'
+    ])
     mskcc_type = st.selectbox('MSKCC Type', ['MFH', 'Synovial sarcoma', 'Leiomyosarcoma'])
-    site_of_primary = st.selectbox('Site of Primary STS', ['left thigh', 'right thigh', 'right parascapusular', 'left biceps', 'right buttock', 'parascapusular', 'left buttock'])
-    treatment = st.selectbox('Treatment', ['Radiotherapy + Surgery', 'Radiotherapy + Surgery + Chemotherapy', 'Surgery + Chemotherapy'])
+    site_of_primary = st.selectbox('Site of Primary STS', [
+        'left thigh', 'right thigh', 'right parascapusular', 
+        'left biceps', 'right buttock', 'parascapusular', 'left buttock'
+    ])
+    treatment = st.selectbox('Treatment', [
+        'Radiotherapy + Surgery', 
+        'Radiotherapy + Surgery + Chemotherapy', 
+        'Surgery + Chemotherapy'
+    ])
 
-    # Create a list of features with user inputs
-    input_data = np.array([sex, age, grade, histological_type, mskcc_type, site_of_primary, treatment])
+    # Prepare input data
+    input_dict = {
+        'Sex': sex,
+        'Age': age,
+        'Grade': grade,
+        'Histological Type': histological_type,
+        'MSKCC Type': mskcc_type,
+        'Site of Primary STS': site_of_primary,
+        'Treatment': treatment,
+    }
 
-    # Encode categorical features into numerical values using LabelEncoder
-    label_encoder_sex = LabelEncoder()
-    label_encoder_grade = LabelEncoder()
-    label_encoder_histological_type = LabelEncoder()
-    label_encoder_mskcc_type = LabelEncoder()
-    label_encoder_site_of_primary = LabelEncoder()
-    label_encoder_treatment = LabelEncoder()
+    # Initialize input array with zeros
+    input_array = np.zeros(len(full_columns))
 
-    # Fit label encoder on all possible values for each column and transform the input data
-    input_data[0] = label_encoder_sex.fit_transform([sex])[0]
-    input_data[2] = label_encoder_grade.fit_transform([grade])[0]
-    input_data[3] = label_encoder_histological_type.fit_transform([histological_type])[0]
-    input_data[4] = label_encoder_mskcc_type.fit_transform([mskcc_type])[0]
-    input_data[5] = label_encoder_site_of_primary.fit_transform([site_of_primary])[0]
-    input_data[6] = label_encoder_treatment.fit_transform([treatment])[0]
+    # Fill in the input array
+    for i, col in enumerate(full_columns):
+        if col in input_dict:
+            value = input_dict[col]
+            if col != 'Age':
+                encoder = feature_encoders[col]
+                input_array[i] = encoder.transform([value])[0]
+            else:
+                input_array[i] = value  # Age is numerical
 
-    # Ensure input_data has 31 features (you need to add the missing features or ensure your model
-    # was trained with these features) by including default values for missing features
-    missing_features = len(full_columns) - len(input_data)
-    if missing_features > 0:
-        input_data = np.append(input_data, np.zeros(missing_features))  # Add zeros for missing features
-    
-    # Reshape to 2D for the scaler
-    input_data = input_data.reshape(1, -1)
+    # Reshape and scale
+    input_array = input_array.reshape(1, -1)
+    input_array = scaler.transform(input_array)
 
-    # Scale the input data (make sure your scaler was trained with the same features)
-    input_data = scaler.transform(input_data)
-
-    # Make prediction using the selected model
+    # Model selection
     model_choice = st.selectbox('Select a Model', list(models.keys()))
     model = models[model_choice]
 
-    # Make prediction and display result
-    prediction = model.predict(input_data)
+    # Prediction
+    prediction = model.predict(input_array)
     predicted_class = np.argmax(prediction, axis=1)
 
-    st.write(f"Predicted Class: {label_encoder.inverse_transform(predicted_class)}")
+    # Decode the predicted class
+    predicted_label = target_encoder.inverse_transform(predicted_class)
+
+    st.write(f"Predicted Class: {predicted_label[0]}")
+
 
 
 if __name__ == "__main__":
