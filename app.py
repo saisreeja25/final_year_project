@@ -4,19 +4,10 @@ import numpy as np
 import streamlit as st
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.model_selection import train_test_split
-from tensorflow.keras.callbacks import EarlyStopping
-import joblib
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Dropout, LSTM, Conv1D, GlobalMaxPooling1D, Reshape
+from tensorflow.keras.models import Sequential, load_model
+from tensorflow.keras.layers import Dense, Conv1D, LSTM, GlobalMaxPooling1D, Reshape
 from tensorflow.keras.optimizers import Adam
-
-# Function to load the label encoder
-def load_label_encoder():
-    return joblib.load('label_encoder.pkl')
-
-# Function to load the feature columns
-def load_feature_columns():
-    return joblib.load('input_columns.pkl')  # Load the feature columns from a pickle file
+from tensorflow.keras.callbacks import EarlyStopping
 
 # --- Model Building Functions ---
 def build_simple_ann(input_shape):
@@ -58,11 +49,10 @@ def train_page():
         st.write("Dataset preview:")
         st.write(df.head())
 
-        # Drop 'Patient ID' column if it exists
+        # Preprocess dataset
         if 'Patient ID' in df.columns:
             df.drop('Patient ID', axis=1, inplace=True)
 
-        # Preprocess dataset
         X = df.drop(columns=['Status (NED, AWD, D)'])  # Assuming 'Status' is the target column
         y = df['Status (NED, AWD, D)']
 
@@ -81,7 +71,7 @@ def train_page():
         X_test = scaler.transform(X_test)
 
         # Save the scaler for later use
-        joblib.dump(scaler, 'scaler.pkl')
+        st.session_state.scaler = scaler  # Save scaler in session state
 
         # Convert target variable to one-hot encoding for multi-class classification
         y_train = pd.get_dummies(y_train)
@@ -117,14 +107,6 @@ def train_page():
         st.subheader('Model Summary')
         model.summary()
 
-        # Option to download the trained model
-        st.download_button(
-            label="Download Trained Model",
-            data=open(f'{model_choice}_model.h5', 'rb').read(),
-            file_name=f'{model_choice}_model.h5',
-            mime="application/octet-stream"
-        )
-
 # --- Prediction Function ---
 def predict(model, user_input, full_columns, scaler):
     # Prepare the user input for prediction
@@ -144,106 +126,51 @@ def predict(model, user_input, full_columns, scaler):
 # --- Main Page Function ---
 def main_page():
     st.title('Medical Prediction App')
-    
-    # Load other components like columns, label encoder, etc.
-    full_columns = load_feature_columns()  # Define or load the feature columns
-    label_encoder = load_label_encoder()  # Load label encoder
-    scaler = joblib.load('scaler.pkl')  # Load the scaler for Age column scaling
 
-    # Sidebar for login or train model
-    st.sidebar.title('Login / Register')
-    page = st.sidebar.radio('Choose Page:', ['Login', 'Register', 'Train Model'])
+    if 'scaler' not in st.session_state:
+        st.session_state.scaler = None  # Initialize scaler if not set yet
 
-    if page == 'Login':
-        st.sidebar.header('Login')
-        username = st.sidebar.text_input('Username')
-        password = st.sidebar.text_input('Password', type='password')
-        
-        if st.sidebar.button('Login'):
-            if check_login(username, password):
-                st.success('Login Successful!')
-                user_input_form(username)
-            else:
-                st.error('Invalid username or password')
+    # Sidebar to navigate to the Train Page and Prediction
+    st.sidebar.title('Navigation')
+    page = st.sidebar.radio('Choose Page:', ['Train Model', 'Make Prediction'])
 
-    elif page == 'Register':
-        st.sidebar.header('Register')
-        username = st.sidebar.text_input('New Username')
-        password = st.sidebar.text_input('New Password', type='password')
-
-        if st.sidebar.button('Register'):
-            if save_new_user(username, password):
-                st.success(f'Account created for {username}')
-            else:
-                st.error('Username already exists')
-
-    elif page == 'Train Model':
+    if page == 'Train Model':
         train_page()  # Navigate to train model page
+    elif page == 'Make Prediction':
+        st.header('Enter Patient Information for Prediction')
 
-# --- Helper Functions for User Authentication ---
-def check_login(username, password):
-    if os.path.exists('credentials.csv'):
-        credentials = pd.read_csv('credentials.csv')
-        user_data = credentials[credentials['username'] == username]
-        if not user_data.empty and user_data['password'].values[0] == password:
-            return True
-    return False
+        # User input form for prediction
+        if 'scaler' in st.session_state and st.session_state.scaler is not None:
+            sex = st.selectbox('Sex', ['Male', 'Female'])
+            age = st.number_input('Age', min_value=0, max_value=120)
+            grade = st.selectbox('Grade', ['Intermediate', 'High'])
+            histological_type = st.selectbox('Histological Type', ['pleiomorphic leiomyosarcoma', 'malignant solitary fibrous tumor', 'sclerosing epithelioid fibrosarcoma', 'myxoid fibrosarcoma', 'undifferentiated - pleiomorphic', 'synovial sarcoma', 'undifferentiated pleomorphic', 'epithelioid sarcoma', 'poorly differentiated synovial sarcoma', 'pleiomorphic spindle cell undifferentiated', 'pleomorphic sarcoma', 'myxofibrosarcoma', 'leiomyosarcoma'])
+            mskcc_type = st.selectbox('MSKCC Type', ['MFH', 'Synovial sarcoma', 'Leiomyosarcoma'])
+            site_of_primary = st.selectbox('Site of Primary STS', ['left thigh', 'right thigh', 'right parascapusular', 'left biceps', 'right buttock', 'parascapusular', 'left buttock'])
+            treatment = st.selectbox('Treatment', ['Radiotherapy + Surgery', 'Radiotherapy + Surgery + Chemotherapy', 'Surgery + Chemotherapy'])
 
-def save_new_user(username, password):
-    if not os.path.exists('credentials.csv'):
-        df = pd.DataFrame(columns=['username', 'password'])
-        df.to_csv('credentials.csv', index=False)
+            user_input = {
+                'Sex': sex,
+                'Age': age,
+                'Grade': grade,
+                'Histological type': histological_type,
+                'MSKCC type': mskcc_type,
+                'Site of primary STS': site_of_primary,
+                'Treatment': treatment
+            }
 
-    credentials = pd.read_csv('credentials.csv')
+            model_choice = st.selectbox('Choose Trained Model', ['Simple ANN', 'CNN', 'LSTM'])
 
-    if username in credentials['username'].values:
-        return False  # Username already exists
-    else:
-        new_user = pd.DataFrame({'username': [username], 'password': [password]})
-        credentials = pd.concat([credentials, new_user], ignore_index=True)
-        credentials.to_csv('credentials.csv', index=False)
-        return True
+            if st.button('Predict'):
+                model = load_model(f'{model_choice}_model.h5')
 
-# --- Helper Function for Prediction ---
-def user_input_form(username):
-    st.header('Enter Patient Information for Prediction')
+                # Assuming the columns are defined during training
+                full_columns = ['Sex', 'Age', 'Grade', 'Histological type', 'MSKCC type', 'Site of primary STS', 'Treatment']
 
-    # Input fields for user
-    sex = st.selectbox('Sex', ['Male', 'Female'])
-    age = st.number_input('Age', min_value=0, max_value=120)
-    grade = st.selectbox('Grade', ['Intermediate', 'High'])
-    histological_type = st.selectbox('Histological Type', ['pleiomorphic leiomyosarcoma', 'malignant solitary fibrous tumor', 'sclerosing epithelioid fibrosarcoma', 'myxoid fibrosarcoma', 'undifferentiated - pleiomorphic', 'synovial sarcoma', 'undifferentiated pleomorphic liposarcoma', 'epithelioid sarcoma', 'poorly differentiated synovial sarcoma', 'pleiomorphic spindle cell undifferentiated', 'pleomorphic sarcoma', 'myxofibrosarcoma', 'leiomyosarcoma'])
-    mskcc_type = st.selectbox('MSKCC Type', ['MFH', 'Synovial sarcoma', 'Leiomyosarcoma'])
-    site_of_primary = st.selectbox('Site of Primary STS', ['left thigh', 'right thigh', 'right parascapusular', 'left biceps', 'right buttock', 'parascapusular', 'left buttock'])
-    treatment = st.selectbox('Treatment', ['Radiotherapy + Surgery', 'Radiotherapy + Surgery + Chemotherapy', 'Surgery + Chemotherapy'])
-    
-    user_input = {
-        'Sex': sex,
-        'Age': age,
-        'Grade': grade,
-        'Histological type': histological_type,
-        'MSKCC type': mskcc_type,
-        'Site of primary STS': site_of_primary,
-        'Treatment': treatment
-    }
+                prediction = predict(model, user_input, full_columns, st.session_state.scaler)
 
-    if st.button('Predict'):
-        model_choice = st.selectbox('Choose Model', ['Simple ANN', 'CNN', 'LSTM'])
-
-        model = load_model(f'{model_choice}_model.h5')
-        prediction = predict(model, user_input, full_columns, scaler)
-        decoded_prediction = label_encoder.inverse_transform(prediction)
-
-        st.subheader(f'Prediction: {decoded_prediction[0]}')
-
-        # Save the user's prediction to user records
-        user_records = pd.read_csv('user_records.csv')
-        user_input['Prediction'] = decoded_prediction[0]
-        user_input['username'] = username  # Store the actual logged-in user
-        user_records = user_records.append(user_input, ignore_index=True)
-        user_records.to_csv('user_records.csv', index=False)
-
-        st.success(f"Prediction: {decoded_prediction[0]} saved to records!")
+                # Show the prediction result
+                st.subheader(f'Prediction: {prediction}')
 
 if __name__ == '__main__':
     main_page()
