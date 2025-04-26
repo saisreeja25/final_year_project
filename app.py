@@ -132,7 +132,11 @@ def user_input_form(models, full_columns, label_encoder, scaler, username):
         st.subheader(f'Prediction: {decoded_prediction[0]}')
 
         # Save the user's prediction to user records
-        user_records = pd.read_csv('user_records.csv')
+        if os.path.exists('user_records.csv'):
+            user_records = pd.read_csv('user_records.csv')
+        else:
+            user_records = pd.DataFrame(columns=['Sex', 'Age', 'Grade', 'Histological type', 'MSKCC type', 'Site of primary STS', 'Treatment', 'Prediction', 'username'])
+
         user_input['Prediction'] = decoded_prediction[0]
         user_input['username'] = username  # Store the actual logged-in user
         user_records = user_records.append(user_input, ignore_index=True)
