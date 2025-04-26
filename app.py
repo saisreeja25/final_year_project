@@ -9,7 +9,17 @@ import joblib
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Dropout, LSTM, Conv1D, GlobalMaxPooling1D, Reshape
 from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.models import load_model
 
+# Function to load pre-trained models
+def load_models():
+    models = {
+        'Simple ANN': load_model('Simple ANN1_model.h5'),
+        'Deep ANN': load_model('Deep ANN1_model.h5'),
+        'CNN': load_model('CNN1_model.h5'),
+        'LSTM': load_model('LSTM1_model.h5')
+    }
+    return models
 # --- Model Building Functions ---
 def build_simple_ann(input_shape):
     model = Sequential([
@@ -135,14 +145,15 @@ def train_page():
 def main_page():
     st.title('Medical Prediction App')
     
-    # Load models and encoders
-    models = load_models()
-    full_columns = load_feature_columns()
-    label_encoder = load_label_encoder()
-    
-    # Load scaler for Age column scaling
-    scaler = joblib.load('scaler.pkl')
+    # Load models
+    models = load_models()  # Load pre-trained models here
 
+    # Load other components like columns, label encoder, etc.
+    full_columns = load_feature_columns()  # Define or load the feature columns
+    label_encoder = load_label_encoder()  # Load label encoder
+    scaler = joblib.load('scaler.pkl')  # Load the scaler for Age column scaling
+
+    # Sidebar for login or train model
     st.sidebar.title('Login / Register')
     page = st.sidebar.radio('Choose Page:', ['Login', 'Register', 'Train Model'])
 
@@ -170,8 +181,7 @@ def main_page():
                 st.error('Username already exists')
 
     elif page == 'Train Model':
-        train_page()
-
+        train_page()  # Navigate to train model page
 # --- Helper Functions for User Authentication ---
 def check_login(username, password):
     if os.path.exists('credentials.csv'):
