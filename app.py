@@ -1,138 +1,156 @@
-import streamlit as st
+import os
 import pandas as pd
 import numpy as np
+import streamlit as st
+from sklearn.preprocessing import LabelEncoder
 import joblib
-from sklearn.preprocessing import StandardScaler, LabelEncoder
-from sklearn.model_selection import train_test_split
-import os
+from tensorflow.keras.models import load_model
+from sklearn.preprocessing import StandardScaler
 
-# Load the models and scalers
-models = {
-    'Simple ANN': joblib.load('Simple ANN_model.pkl'),
-    'Deep ANN': joblib.load('Deep ANN_model.pkl'),
-    'CNN': joblib.load('CNN_model.pkl'),
-    'LSTM': joblib.load('LSTM_model.pkl')
-}
+# --- Functions for Model Loading and Prediction ---
+def load_models():
+    models = {
+        'Simple ANN': load_model('Simple ANN_model.h5'),
+        'Deep ANN': load_model('Deep ANN_model.h5'),
+        'CNN': load_model('CNN_model.h5'),
+        'LSTM': load_model('LSTM_model.h5')
+    }
+    return models
 
-scaler = joblib.load('scaler.pkl')  # Assuming the scaler is saved in this file
-label_encoder = joblib.load('label_encoder.pkl')  # Assuming the label encoder is saved here
+def load_feature_columns():
+    if os.path.exists('input_columns.pkl'):
+        return joblib.load('input_columns.pkl')
+    else:
+        st.error("Missing 'input_columns.pkl'. Please create it with the correct feature columns.")
+        return []
 
-# User authentication
-def login():
-    st.title("Login Page")
-    
-    # Form for login
-    with st.form(key="login_form"):
-        username = st.text_input("Username")
-        password = st.text_input("Password", type="password")
-        submit_button = st.form_submit_button("Login")
-        
-        if submit_button:
-            user_df = pd.read_csv("user_records.csv")  # User data
-            if username in user_df['Username'].values:
-                user_data = user_df[user_df['Username'] == username]
-                if user_data.iloc[0]['Password'] == password:
-                    st.session_state.logged_in = True
-                    st.session_state.username = username
-                    st.success("Login successful!")
-                    return True
-                else:
-                    st.error("Incorrect password.")
-            else:
-                st.error("Username not found.")
-    return False
+def load_label_encoder():
+    if os.path.exists('label_encoder.pkl'):
+        return joblib.load('label_encoder.pkl')
+    else:
+        st.error("Missing 'label_encoder.pkl'. Please create it with the correct label encoding.")
+        return None
 
-# Registration page
-def register():
-    st.title("Registration Page")
-    
-    with st.form(key="register_form"):
-        username = st.text_input("Username")
-        password = st.text_input("Password", type="password")
-        confirm_password = st.text_input("Confirm Password", type="password")
-        submit_button = st.form_submit_button("Register")
-        
-        if submit_button:
-            if password == confirm_password:
-                user_df = pd.read_csv("user_records.csv")
-                new_user = pd.DataFrame({"Username": [username], "Password": [password]})
-                user_df = pd.concat([user_df, new_user], ignore_index=True)
-                user_df.to_csv("user_records.csv", index=False)
-                st.success("Registration successful! You can now login.")
-            else:
-                st.error("Passwords do not match.")
-
-# Preprocess user input
-def preprocess_user_input(user_input):
+def preprocess_user_input(user_input, full_columns, scaler):
     categorical_cols = ['Sex', 'Grade', 'Histological type', 'MSKCC type', 'Site of primary STS', 'Treatment']
     input_df = pd.DataFrame([user_input])
     
-    # Handle numerical columns
     input_df['Age'] = scaler.transform(input_df[['Age']])
-    
-    # One hot encoding for categorical columns
     input_df = pd.get_dummies(input_df, columns=categorical_cols)
+    input_df = input_df.reindex(columns=full_columns, fill_value=0)
     
     return input_df.astype(np.float32).values
 
-# Predict function for model
-def predict(model_name, user_input):
-    model = models[model_name]
-    X_input = preprocess_user_input(user_input)
-    prediction = model.predict(X_input)
-    decoded_prediction = label_encoder.inverse_transform(prediction)
-    return decoded_prediction[0]
+def predict(model, user_input, full_columns, scaler):
+    processed_input = preprocess_user_input(user_input, full_columns, scaler)
+    prediction = model.predict(processed_input)
+    return prediction
 
-# Main page
+# --- Login System ---
+def check_login(username, password):
+    if os.path.exists('credentials.csv'):
+        credentials = pd.read_csv('credentials.csv')
+        user_data = credentials[credentials['username'] == username]
+        if not user_data.empty and user_data['password'].values[0] == password:
+            return True
+    return False
+
+def save_new_user(username, password):
+    if not os.path.exists('credentials.csv'):
+        df = pd.DataFrame(columns=['username', 'password'])
+        df.to_csv('credentials.csv', index=False)
+
+    credentials = pd.read_csv('credentials.csv')
+
+    if username in credentials['username'].values:
+        return False  # Username already exists
+    else:
+        new_user = pd.DataFrame({'username': [username], 'password': [password]})
+        credentials = pd.concat([credentials, new_user], ignore_index=True)
+        credentials.to_csv('credentials.csv', index=False)
+        return True
+
+# --- Streamlit Interface ---
 def main_page():
-    st.title("Model Prediction Page")
+    st.title('Medical Prediction App')
+    
+    # Load models and encoders
+    models = load_models()
+    full_columns = load_feature_columns()
+    label_encoder = load_label_encoder()
+    
+    # Load scaler for Age column scaling
+    scaler = joblib.load('scaler.pkl') if os.path.exists('scaler.pkl') else None
 
-    if "logged_in" not in st.session_state or not st.session_state.logged_in:
-        st.error("Please log in first.")
-        return
+    st.sidebar.title('Login / Register')
+    page = st.sidebar.radio('Choose Page:', ['Login', 'Register'])
 
-    st.write(f"Welcome {st.session_state.username}!")
+    if page == 'Login':
+        st.sidebar.header('Login')
+        username = st.sidebar.text_input('Username')
+        password = st.sidebar.text_input('Password', type='password')
+        
+        if st.sidebar.button('Login'):
+            if check_login(username, password):
+                st.success('Login Successful!')
+                user_input_form(models, full_columns, label_encoder, scaler, username)
+            else:
+                st.error('Invalid username or password')
 
-    # Input fields for prediction
+    elif page == 'Register':
+        st.sidebar.header('Register')
+        username = st.sidebar.text_input('New Username')
+        password = st.sidebar.text_input('New Password', type='password')
+
+        if st.sidebar.button('Register'):
+            if save_new_user(username, password):
+                st.success(f'Account created for {username}')
+            else:
+                st.error('Username already exists')
+
+def user_input_form(models, full_columns, label_encoder, scaler, username):
+    st.header('Enter Patient Information for Prediction')
+
+    # Input fields for user
+    sex = st.selectbox('Sex', ['Male', 'Female'])
+    age = st.number_input('Age', min_value=0, max_value=120)
+    grade = st.selectbox('Grade', ['Intermediate', 'High'])
+    histological_type = st.selectbox('Histological Type', ['pleiomorphic leiomyosarcoma', 'malignant solitary fibrous tumor', 'sclerosing epithelioid fibrosarcoma', 'myxoid fibrosarcoma', 'undifferentiated - pleiomorphic', 'synovial sarcoma', 'undifferentiated pleomorphic liposarcoma', 'epithelioid sarcoma', 'poorly differentiated synovial sarcoma', 'pleiomorphic spindle cell undifferentiated', 'pleomorphic sarcoma', 'myxofibrosarcoma', 'leiomyosarcoma'])
+    mskcc_type = st.selectbox('MSKCC Type', ['MFH', 'Synovial sarcoma', 'Leiomyosarcoma'])
+    site_of_primary = st.selectbox('Site of Primary STS', ['left thigh', 'right thigh', 'right parascapusular', 'left biceps', 'right buttock', 'parascapusular', 'left buttock'])
+    treatment = st.selectbox('Treatment', ['Radiotherapy + Surgery', 'Radiotherapy + Surgery + Chemotherapy', 'Surgery + Chemotherapy'])
+    
     user_input = {
-        'Sex': st.selectbox('Sex', ['Male', 'Female']),
-        'Age': st.number_input('Age', min_value=0, max_value=100),
-        'Grade': st.selectbox('Grade', ['High', 'Intermediate']),
-        'Histological type': st.selectbox('Histological type', ['leiomyosarcoma', 'synovial sarcoma', 'fibrosarcoma']),
-        'MSKCC type': st.selectbox('MSKCC type', ['MFH', 'Synovial sarcoma', 'Leiomyosarcoma']),
-        'Site of primary STS': st.selectbox('Site of primary STS', ['left thigh', 'right thigh', 'left biceps', 'right buttock']),
-        'Treatment': st.selectbox('Treatment', ['Radiotherapy + Surgery', 'Radiotherapy + Surgery + Chemotherapy', 'Surgery + Chemotherapy'])
+        'Sex': sex,
+        'Age': age,
+        'Grade': grade,
+        'Histological type': histological_type,
+        'MSKCC type': mskcc_type,
+        'Site of primary STS': site_of_primary,
+        'Treatment': treatment
     }
 
-    model_choice = st.selectbox("Choose model", ['Simple ANN', 'Deep ANN', 'CNN', 'LSTM'])
-    
-    if st.button("Predict"):
-        prediction = predict(model_choice, user_input)
-        st.write(f"Prediction: {prediction}")
+    if st.button('Predict'):
+        selected_model_name = st.selectbox('Choose Model', list(models.keys()))
+        selected_model = models[selected_model_name]
 
-# Logout page
-def logout():
-    st.session_state.logged_in = False
-    st.session_state.username = ""
-    st.success("You have logged out successfully.")
+        prediction = predict(selected_model, user_input, full_columns, scaler)
+        decoded_prediction = label_encoder.inverse_transform(prediction)
 
-# Main app flow
-def app():
-    st.sidebar.title("Navigation")
-    choice = st.sidebar.radio("Select an option", ["Login", "Register", "Predict", "Logout"])
-    
-    if choice == "Login":
-        if login():
-            main_page()
-    elif choice == "Register":
-        register()
-    elif choice == "Predict":
-        if "logged_in" in st.session_state and st.session_state.logged_in:
-            main_page()
+        st.subheader(f'Prediction: {decoded_prediction[0]}')
+
+        # Save the user's prediction to user records
+        if os.path.exists('user_records.csv'):
+            user_records = pd.read_csv('user_records.csv')
         else:
-            st.error("Please log in first.")
-    elif choice == "Logout":
-        logout()
+            user_records = pd.DataFrame(columns=list(user_input.keys()) + ['Prediction', 'username'])
 
-if __name__ == "__main__":
-    app()
+        user_input['Prediction'] = decoded_prediction[0]
+        user_input['username'] = username
+        user_records = user_records.append(user_input, ignore_index=True)
+        user_records.to_csv('user_records.csv', index=False)
+
+        st.success(f"Prediction: {decoded_prediction[0]} saved to records!")
+
+if __name__ == '__main__':
+    main_page()
