@@ -217,8 +217,7 @@ def train_page():
             mime="application/octet-stream"
         )
 
-# --- Prediction Page ---
-def prediction_page():
+# --- Prediction Page ---def prediction_page():
     st.subheader('Make Prediction')
 
     # Load models
@@ -241,7 +240,7 @@ def prediction_page():
     input_data = np.array([sex, age, grade, histological_type, mskcc_type, site_of_primary, treatment])
 
     # Preprocess the input data
-    input_data = input_data.reshape(1, -1)
+    input_data = input_data.reshape(1, -1)  # Reshape it to 2D for the scaler
 
     # Scale the input data
     input_data = scaler.transform(input_data)
@@ -255,6 +254,7 @@ def prediction_page():
     predicted_class = np.argmax(prediction, axis=1)
 
     st.write(f"Predicted Class: {label_encoder.inverse_transform(predicted_class)}")
+
 
 if __name__ == "__main__":
     main_page()
