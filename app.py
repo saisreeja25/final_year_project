@@ -113,8 +113,6 @@ def train_page():
         # Define model based on selected choice
         if model_choice == 'Simple ANN':
             model = build_simple_ann(X_train.shape[1])
-        '''elif model_choice == 'Deep ANN':
-            model = build_deep_ann(X_train.shape[1])'''
         elif model_choice == 'CNN':
             model = build_cnn(X_train.shape[1])
         elif model_choice == 'LSTM':
