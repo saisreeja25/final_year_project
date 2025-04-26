@@ -3,19 +3,27 @@ import pandas as pd
 import numpy as np
 import streamlit as st
 from sklearn.preprocessing import LabelEncoder
-import joblib
-from tensorflow.keras.models import load_model
+from tensorflow.keras.models import load_model, Sequential
+from tensorflow.keras.layers import Dense, LSTM, Conv2D, Flatten
+from tensorflow.keras.optimizers import Adam
 from sklearn.preprocessing import StandardScaler
+import joblib
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
 
 # --- Functions for Model Loading and Prediction ---
 def load_models():
-    models = {
-        'Simple ANN': load_model('Simple ANN1_model.h5'),
-        'Deep ANN': load_model('Deep ANN_model.h5'),
-        'CNN': load_model('CNN1_model.h5'),
-        'LSTM': load_model('LSTM1_model.h5')
-    }
-    return models
+    try:
+        models = {
+            'Simple ANN': load_model('Simple_ANN_model.h5'),
+            'Deep ANN': load_model('Deep_ANN_model.h5'),
+            'CNN': load_model('CNN_model.h5'),
+            'LSTM': load_model('LSTM_model.h5')
+        }
+        return models
+    except Exception as e:
+        st.error(f"Error loading models: {e}")
+        return None
 
 def load_feature_columns():
     return joblib.load('input_columns.pkl')
@@ -37,6 +45,44 @@ def predict(model, user_input, full_columns, scaler):
     processed_input = preprocess_user_input(user_input, full_columns, scaler)
     prediction = model.predict(processed_input)
     return prediction
+
+def train_model(model_type, X_train, y_train):
+    if model_type == 'Simple ANN':
+        model = Sequential([
+            Dense(64, activation='relu', input_dim=X_train.shape[1]),
+            Dense(32, activation='relu'),
+            Dense(1, activation='sigmoid')
+        ])
+        model.compile(optimizer=Adam(), loss='binary_crossentropy', metrics=['accuracy'])
+    
+    elif model_type == 'Deep ANN':
+        model = Sequential([
+            Dense(128, activation='relu', input_dim=X_train.shape[1]),
+            Dense(64, activation='relu'),
+            Dense(32, activation='relu'),
+            Dense(1, activation='sigmoid')
+        ])
+        model.compile(optimizer=Adam(), loss='binary_crossentropy', metrics=['accuracy'])
+    
+    elif model_type == 'CNN':
+        model = Sequential([
+            Conv2D(32, (3, 3), activation='relu', input_shape=(X_train.shape[1], X_train.shape[2], 1)),
+            Flatten(),
+            Dense(64, activation='relu'),
+            Dense(1, activation='sigmoid')
+        ])
+        model.compile(optimizer=Adam(), loss='binary_crossentropy', metrics=['accuracy'])
+
+    elif model_type == 'LSTM':
+        model = Sequential([
+            LSTM(64, input_shape=(X_train.shape[1], 1)),
+            Dense(32, activation='relu'),
+            Dense(1, activation='sigmoid')
+        ])
+        model.compile(optimizer=Adam(), loss='binary_crossentropy', metrics=['accuracy'])
+
+    model.fit(X_train, y_train, epochs=10, batch_size=32)
+    return model
 
 # --- Login System ---
 def check_login(username, password):
@@ -68,6 +114,8 @@ def main_page():
     
     # Load models and encoders
     models = load_models()
+    if models is None:
+        return
     full_columns = load_feature_columns()
     label_encoder = load_label_encoder()
     
@@ -132,11 +180,7 @@ def user_input_form(models, full_columns, label_encoder, scaler, username):
         st.subheader(f'Prediction: {decoded_prediction[0]}')
 
         # Save the user's prediction to user records
-        if os.path.exists('user_records.csv'):
-            user_records = pd.read_csv('user_records.csv')
-        else:
-            user_records = pd.DataFrame(columns=['Sex', 'Age', 'Grade', 'Histological type', 'MSKCC type', 'Site of primary STS', 'Treatment', 'Prediction', 'username'])
-
+        user_records = pd.read_csv('user_records.csv')
         user_input['Prediction'] = decoded_prediction[0]
         user_input['username'] = username  # Store the actual logged-in user
         user_records = user_records.append(user_input, ignore_index=True)
@@ -144,5 +188,46 @@ def user_input_form(models, full_columns, label_encoder, scaler, username):
 
         st.success(f"Prediction: {decoded_prediction[0]} saved to records!")
 
+def train_page():
+    st.title('Train Model')
+
+    # Upload dataset
+    file = st.file_uploader("Upload CSV dataset", type="csv")
+    
+    if file is not None:
+        df = pd.read_csv(file)
+        st.write(df.head())
+
+        # Preprocess dataset
+        X = df.drop(columns=['Target'])  # Assuming 'Target' column as the label column
+        y = df['Target']
+
+        # Encode categorical features
+        categorical_cols = X.select_dtypes(include=['object']).columns
+        for col in categorical_cols:
+            encoder = LabelEncoder()
+            X[col] = encoder.fit_transform(X[col])
+
+        # Split dataset into training and testing
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+        
+        # Train model
+        model_type = st.selectbox('Select Model', ['Simple ANN', 'Deep ANN', 'CNN', 'LSTM'])
+        
+        if st.button('Train Model'):
+            model = train_model(model_type, X_train, y_train)
+            st.success(f'{model_type} trained successfully!')
+
+            # Evaluate the model
+            y_pred = model.predict(X_test)
+            y_pred = (y_pred > 0.5).astype(int)  # Assuming binary classification
+            accuracy = accuracy_score(y_test, y_pred)
+            st.write(f'Accuracy: {accuracy * 100:.2f}%')
+
 if __name__ == '__main__':
-    main_page()
+    page = st.sidebar.radio("Select Page", ['Main Page', 'Train Model'])
+    
+    if page == 'Main Page':
+        main_page()
+    elif page == 'Train Model':
+        train_page()
