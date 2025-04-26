@@ -218,6 +218,7 @@ def train_page():
         )
 
 # --- Prediction Page ---def prediction_page():
+ def prediction_page():
     st.subheader('Make Prediction')
 
     # Load models
@@ -254,7 +255,6 @@ def train_page():
     predicted_class = np.argmax(prediction, axis=1)
 
     st.write(f"Predicted Class: {label_encoder.inverse_transform(predicted_class)}")
-
 
 if __name__ == "__main__":
     main_page()
