@@ -146,7 +146,7 @@ def train_page():
     file = "Bone Tumour Dataset.csv"  # Specify your local file path
 
     # Load the dataset
-    data = pd.read_csv(dataset_path)
+    data = pd.read_csv(file)
     
     if file is not None:
         df = pd.read_csv(file)
