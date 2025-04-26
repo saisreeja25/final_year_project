@@ -2,120 +2,141 @@ import os
 import pandas as pd
 import numpy as np
 import streamlit as st
-from sklearn.preprocessing import LabelEncoder
-from tensorflow.keras.models import load_model, Sequential
-from tensorflow.keras.layers import Dense, LSTM, Conv2D, Flatten
-from tensorflow.keras.optimizers import Adam
-from sklearn.preprocessing import StandardScaler
-import joblib
+from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
+from tensorflow.keras.callbacks import EarlyStopping
+import joblib
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Dropout, LSTM, Conv1D, GlobalMaxPooling1D, Reshape
+from tensorflow.keras.optimizers import Adam
 
-# --- Functions for Model Loading and Prediction ---
-def load_models():
-    try:
-        models = {
-            'Simple ANN': load_model('Simple ANN1_model.h5'),
-            'Deep ANN': load_model('Deep ANN_model.h5'),
-            'CNN': load_model('CNN_model.h5'),
-            'LSTM': load_model('LSTM_model.h5')
-        }
-        return models
-    except Exception as e:
-        st.error(f"Error loading models: {e}")
-        return None
-
-def load_feature_columns():
-    return joblib.load('input_columns.pkl')
-
-def load_label_encoder():
-    return joblib.load('label_encoder.pkl')
-
-def preprocess_user_input(user_input, full_columns, scaler):
-    categorical_cols = ['Sex', 'Grade', 'Histological type', 'MSKCC type', 'Site of primary STS', 'Treatment']
-    input_df = pd.DataFrame([user_input])
-    
-    input_df['Age'] = scaler.transform(input_df[['Age']])
-    input_df = pd.get_dummies(input_df, columns=categorical_cols)
-    input_df = input_df.reindex(columns=full_columns, fill_value=0)
-    
-    return input_df.astype(np.float32).values
-
-def predict(model, user_input, full_columns, scaler):
-    processed_input = preprocess_user_input(user_input, full_columns, scaler)
-    prediction = model.predict(processed_input)
-    return prediction
-
-def train_model(model_type, X_train, y_train):
-    if model_type == 'Simple ANN':
-        model = Sequential([
-            Dense(64, activation='relu', input_dim=X_train.shape[1]),
-            Dense(32, activation='relu'),
-            Dense(1, activation='sigmoid')
-        ])
-        model.compile(optimizer=Adam(), loss='binary_crossentropy', metrics=['accuracy'])
-    
-    elif model_type == 'Deep ANN':
-        model = Sequential([
-            Dense(128, activation='relu', input_dim=X_train.shape[1]),
-            Dense(64, activation='relu'),
-            Dense(32, activation='relu'),
-            Dense(1, activation='sigmoid')
-        ])
-        model.compile(optimizer=Adam(), loss='binary_crossentropy', metrics=['accuracy'])
-    
-    elif model_type == 'CNN':
-        model = Sequential([
-            Conv2D(32, (3, 3), activation='relu', input_shape=(X_train.shape[1], X_train.shape[2], 1)),
-            Flatten(),
-            Dense(64, activation='relu'),
-            Dense(1, activation='sigmoid')
-        ])
-        model.compile(optimizer=Adam(), loss='binary_crossentropy', metrics=['accuracy'])
-
-    elif model_type == 'LSTM':
-        model = Sequential([
-            LSTM(64, input_shape=(X_train.shape[1], 1)),
-            Dense(32, activation='relu'),
-            Dense(1, activation='sigmoid')
-        ])
-        model.compile(optimizer=Adam(), loss='binary_crossentropy', metrics=['accuracy'])
-
-    model.fit(X_train, y_train, epochs=10, batch_size=32)
+# --- Model Building Functions ---
+def build_simple_ann(input_shape):
+    model = Sequential([
+        Dense(64, activation='relu', input_shape=(input_shape,)),
+        Dense(32, activation='relu'),
+        Dense(3, activation='softmax')  # For three classes
+    ])
     return model
 
-# --- Login System ---
-def check_login(username, password):
-    if os.path.exists('credentials.csv'):
-        credentials = pd.read_csv('credentials.csv')
-        user_data = credentials[credentials['username'] == username]
-        if not user_data.empty and user_data['password'].values[0] == password:
-            return True
-    return False
+def build_deep_ann(input_shape):
+    model = Sequential([
+        Dense(256, activation='relu', input_shape=(input_shape,)),
+        Dropout(0.3),
+        Dense(128, activation='relu'),
+        Dropout(0.3),
+        Dense(64, activation='relu'),
+        Dropout(0.3),
+        Dense(3, activation='softmax')  # For three classes
+    ])
+    return model
 
-def save_new_user(username, password):
-    if not os.path.exists('credentials.csv'):
-        df = pd.DataFrame(columns=['username', 'password'])
-        df.to_csv('credentials.csv', index=False)
+def build_cnn(input_shape):
+    model = Sequential([
+        Reshape((input_shape, 1), input_shape=(input_shape,)),
+        Conv1D(64, 3, activation='relu'),
+        GlobalMaxPooling1D(),
+        Dense(32, activation='relu'),
+        Dense(3, activation='softmax')  # For three classes
+    ])
+    return model
 
-    credentials = pd.read_csv('credentials.csv')
+def build_lstm(input_shape):
+    model = Sequential([
+        Reshape((input_shape, 1), input_shape=(input_shape,)),
+        LSTM(64),
+        Dense(32, activation='relu'),
+        Dense(3, activation='softmax')  # For three classes
+    ])
+    return model
 
-    if username in credentials['username'].values:
-        return False  # Username already exists
-    else:
-        new_user = pd.DataFrame({'username': [username], 'password': [password]})
-        credentials = pd.concat([credentials, new_user], ignore_index=True)
-        credentials.to_csv('credentials.csv', index=False)
-        return True
+# --- Train Page Function ---
+def train_page():
+    st.title('Train Model')
 
-# --- Streamlit Interface ---
+    # Upload dataset
+    file = st.file_uploader("Upload CSV dataset", type="csv")
+    
+    if file is not None:
+        df = pd.read_csv(file)
+        st.write("Dataset preview:")
+        st.write(df.head())
+
+        # Drop 'Patient ID' column if it exists
+        if 'Patient ID' in df.columns:
+            df.drop('Patient ID', axis=1, inplace=True)
+
+        # Preprocess dataset
+        X = df.drop(columns=['Status (NED, AWD, D)'])  # Assuming 'Status' is the target column
+        y = df['Status (NED, AWD, D)']
+
+        # Encode categorical features
+        categorical_cols = X.select_dtypes(include=['object']).columns
+        for col in categorical_cols:
+            encoder = LabelEncoder()
+            X[col] = encoder.fit_transform(X[col])
+
+        # Train-test split
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+        # Normalize the data
+        scaler = StandardScaler()
+        X_train = scaler.fit_transform(X_train)
+        X_test = scaler.transform(X_test)
+
+        # Save the scaler for later use
+        joblib.dump(scaler, 'scaler.pkl')
+
+        # Convert target variable to one-hot encoding for multi-class classification
+        y_train = pd.get_dummies(y_train)
+        y_test = pd.get_dummies(y_test)
+
+        # Select model type based on user input
+        model_choice = st.selectbox('Select a Model Type', ['Simple ANN', 'Deep ANN', 'CNN', 'LSTM'])
+
+        # Define model based on selected choice
+        if model_choice == 'Simple ANN':
+            model = build_simple_ann(X_train.shape[1])
+        elif model_choice == 'Deep ANN':
+            model = build_deep_ann(X_train.shape[1])
+        elif model_choice == 'CNN':
+            model = build_cnn(X_train.shape[1])
+        elif model_choice == 'LSTM':
+            model = build_lstm(X_train.shape[1])
+
+        # Compile the model
+        model.compile(optimizer=Adam(), loss='categorical_crossentropy', metrics=['accuracy'])
+
+        # Train the model with early stopping
+        early_stopping = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
+        history = model.fit(X_train, y_train, epochs=50, batch_size=32, validation_data=(X_test, y_test), callbacks=[early_stopping])
+
+        # Save the trained model
+        model.save(f'{model_choice}_model.h5')
+        st.success(f"Model '{model_choice}' has been trained and saved successfully!")
+
+        # Display training history
+        st.subheader('Training History')
+        st.line_chart(pd.DataFrame(history.history)[['accuracy', 'val_accuracy']])
+
+        # Show model summary
+        st.subheader('Model Summary')
+        model.summary()
+
+        # Option to download the trained model
+        st.download_button(
+            label="Download Trained Model",
+            data=open(f'{model_choice}_model.h5', 'rb').read(),
+            file_name=f'{model_choice}_model.h5',
+            mime="application/octet-stream"
+        )
+
+# --- Main Page Function ---
 def main_page():
     st.title('Medical Prediction App')
     
     # Load models and encoders
     models = load_models()
-    if models is None:
-        return
     full_columns = load_feature_columns()
     label_encoder = load_label_encoder()
     
@@ -123,7 +144,7 @@ def main_page():
     scaler = joblib.load('scaler.pkl')
 
     st.sidebar.title('Login / Register')
-    page = st.sidebar.radio('Choose Page:', ['Login', 'Register'])
+    page = st.sidebar.radio('Choose Page:', ['Login', 'Register', 'Train Model'])
 
     if page == 'Login':
         st.sidebar.header('Login')
@@ -148,6 +169,34 @@ def main_page():
             else:
                 st.error('Username already exists')
 
+    elif page == 'Train Model':
+        train_page()
+
+# --- Helper Functions for User Authentication ---
+def check_login(username, password):
+    if os.path.exists('credentials.csv'):
+        credentials = pd.read_csv('credentials.csv')
+        user_data = credentials[credentials['username'] == username]
+        if not user_data.empty and user_data['password'].values[0] == password:
+            return True
+    return False
+
+def save_new_user(username, password):
+    if not os.path.exists('credentials.csv'):
+        df = pd.DataFrame(columns=['username', 'password'])
+        df.to_csv('credentials.csv', index=False)
+
+    credentials = pd.read_csv('credentials.csv')
+
+    if username in credentials['username'].values:
+        return False  # Username already exists
+    else:
+        new_user = pd.DataFrame({'username': [username], 'password': [password]})
+        credentials = pd.concat([credentials, new_user], ignore_index=True)
+        credentials.to_csv('credentials.csv', index=False)
+        return True
+
+# --- Helper Function for Prediction ---
 def user_input_form(models, full_columns, label_encoder, scaler, username):
     st.header('Enter Patient Information for Prediction')
 
@@ -188,46 +237,5 @@ def user_input_form(models, full_columns, label_encoder, scaler, username):
 
         st.success(f"Prediction: {decoded_prediction[0]} saved to records!")
 
-def train_page():
-    st.title('Train Model')
-
-    # Upload dataset
-    file = st.file_uploader("Upload CSV dataset", type="csv")
-    
-    if file is not None:
-        df = pd.read_csv(file)
-        st.write(df.head())
-        df.drop('Patient ID', axis=1, inplace=True)
-        # Preprocess dataset
-        X = df.drop(columns=['Status (NED, AWD, D)',])  # Assuming 'Target' column as the label column
-        y = df['Status (NED, AWD, D)']
-
-        # Encode categorical features
-        categorical_cols = X.select_dtypes(include=['object']).columns
-        for col in categorical_cols:
-            encoder = LabelEncoder()
-            X[col] = encoder.fit_transform(X[col])
-
-        # Split dataset into training and testing
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-        
-        # Train model
-        model_type = st.selectbox('Select Model', ['Simple ANN', 'Deep ANN', 'CNN', 'LSTM'])
-        
-        if st.button('Train Model'):
-            model = train_model(model_type, X_train, y_train)
-            st.success(f'{model_type} trained successfully!')
-
-            # Evaluate the model
-            y_pred = model.predict(X_test)
-            y_pred = (y_pred > 0.5).astype(int)  # Assuming binary classification
-            accuracy = accuracy_score(y_test, y_pred)
-            st.write(f'Accuracy: {accuracy * 100:.2f}%')
-
 if __name__ == '__main__':
-    page = st.sidebar.radio("Select Page", ['Main Page', 'Train Model'])
-    
-    if page == 'Main Page':
-        main_page()
-    elif page == 'Train Model':
-        train_page()
+    main_page()
