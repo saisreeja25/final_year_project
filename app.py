@@ -9,43 +9,20 @@ import joblib
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Dropout, LSTM, Conv1D, GlobalMaxPooling1D, Reshape
 from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.models import load_model
-
-# Function to load pre-trained models
-
-import joblib
 
 # Function to load the label encoder
 def load_label_encoder():
     return joblib.load('label_encoder.pkl')
+
 # Function to load the feature columns
 def load_feature_columns():
     return joblib.load('input_columns.pkl')  # Load the feature columns from a pickle file
 
-def load_models():
-    models = {
-        'Simple ANN': load_model('Simple ANN_model.h5'),
-        'CNN': load_model('CNN1_model.h5'),
-        'LSTM': load_model('LSTM1_model.h5')
-    }
-    return models
 # --- Model Building Functions ---
 def build_simple_ann(input_shape):
     model = Sequential([
         Dense(64, activation='relu', input_shape=(input_shape,)),
         Dense(32, activation='relu'),
-        Dense(3, activation='softmax')  # For three classes
-    ])
-    return model
-
-def build_deep_ann(input_shape):
-    model = Sequential([
-        Dense(256, activation='relu', input_shape=(input_shape,)),
-        Dropout(0.3),
-        Dense(128, activation='relu'),
-        Dropout(0.3),
-        Dense(64, activation='relu'),
-        Dropout(0.3),
         Dense(3, activation='softmax')  # For three classes
     ])
     return model
@@ -111,7 +88,7 @@ def train_page():
         y_test = pd.get_dummies(y_test)
 
         # Select model type based on user input
-        model_choice = st.selectbox('Select a Model Type', ['Simple ANN', 'Deep ANN', 'CNN', 'LSTM'])
+        model_choice = st.selectbox('Select a Model Type', ['Simple ANN', 'CNN', 'LSTM'])
 
         # Define model based on selected choice
         if model_choice == 'Simple ANN':
@@ -148,13 +125,26 @@ def train_page():
             mime="application/octet-stream"
         )
 
+# --- Prediction Function ---
+def predict(model, user_input, full_columns, scaler):
+    # Prepare the user input for prediction
+    input_data = pd.DataFrame([user_input], columns=full_columns)
+    
+    # Scale the input data
+    input_data_scaled = scaler.transform(input_data)
+
+    # Predict using the model
+    prediction = model.predict(input_data_scaled)
+
+    # Get the class with the highest probability
+    predicted_class = np.argmax(prediction, axis=1)
+
+    return predicted_class
+
 # --- Main Page Function ---
 def main_page():
     st.title('Medical Prediction App')
     
-    # Load models
-    models = load_models()  # Load pre-trained models here
-
     # Load other components like columns, label encoder, etc.
     full_columns = load_feature_columns()  # Define or load the feature columns
     label_encoder = load_label_encoder()  # Load label encoder
@@ -172,7 +162,7 @@ def main_page():
         if st.sidebar.button('Login'):
             if check_login(username, password):
                 st.success('Login Successful!')
-                user_input_form(models, full_columns, label_encoder, scaler, username)
+                user_input_form(username)
             else:
                 st.error('Invalid username or password')
 
@@ -189,6 +179,7 @@ def main_page():
 
     elif page == 'Train Model':
         train_page()  # Navigate to train model page
+
 # --- Helper Functions for User Authentication ---
 def check_login(username, password):
     if os.path.exists('credentials.csv'):
@@ -214,7 +205,7 @@ def save_new_user(username, password):
         return True
 
 # --- Helper Function for Prediction ---
-def user_input_form(models, full_columns, label_encoder, scaler, username):
+def user_input_form(username):
     st.header('Enter Patient Information for Prediction')
 
     # Input fields for user
@@ -237,10 +228,10 @@ def user_input_form(models, full_columns, label_encoder, scaler, username):
     }
 
     if st.button('Predict'):
-        selected_model_name = st.selectbox('Choose Model', list(models.keys()))
-        selected_model = models[selected_model_name]
+        model_choice = st.selectbox('Choose Model', ['Simple ANN', 'CNN', 'LSTM'])
 
-        prediction = predict(selected_model, user_input, full_columns, scaler)
+        model = load_model(f'{model_choice}_model.h5')
+        prediction = predict(model, user_input, full_columns, scaler)
         decoded_prediction = label_encoder.inverse_transform(prediction)
 
         st.subheader(f'Prediction: {decoded_prediction[0]}')
