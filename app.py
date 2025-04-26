@@ -76,9 +76,13 @@ def build_lstm(input_shape):
 def main_page():
     st.title('Medical Prediction App')
 
-    # User input for login
+    # User input for login or register
     if 'logged_in' not in st.session_state or not st.session_state.logged_in:
-        login_page()
+        option = st.radio("Choose an option", ["Login", "Register"])
+        if option == "Login":
+            login_page()
+        else:
+            register_page()
     else:
         st.sidebar.write(f"Logged in as: {st.session_state.username}")
         if st.sidebar.button('Logout'):
@@ -96,6 +100,25 @@ def main_page():
             train_page()
         elif selected_tab == 'Make Prediction':
             prediction_page()
+
+# --- Register Page Function ---
+def register_page():
+    st.title('Register Page')
+
+    username = st.text_input('Username')
+    password = st.text_input('Password', type='password')
+    confirm_password = st.text_input('Confirm Password', type='password')
+
+    if password != confirm_password:
+        st.error("Passwords do not match!")
+    elif st.button('Register'):
+        if register_user(username, password):
+            st.success(f"User {username} registered successfully!")
+            st.session_state.logged_in = True
+            st.session_state.username = username
+            st.experimental_rerun()  # Reload the page
+        else:
+            st.error(f"User {username} already exists!")
 
 # --- Login Page Function ---
 def login_page():
