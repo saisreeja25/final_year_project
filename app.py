@@ -219,7 +219,6 @@ def train_page():
 
 # --- Prediction Page ---def prediction_page():
 from sklearn.preprocessing import LabelEncoder
-
 def prediction_page():
     st.subheader('Make Prediction')
 
@@ -227,7 +226,7 @@ def prediction_page():
     models = load_models()
 
     # Load other components like columns, label encoder, etc.
-    full_columns = load_feature_columns()  # Define or load the feature columns
+    full_columns = load_feature_columns()  # Define or load the full feature columns
     label_encoder = load_label_encoder()  # Load label encoder
     scaler = joblib.load('scaler.pkl')  # Load the scaler for Age column scaling
 
@@ -240,9 +239,10 @@ def prediction_page():
     site_of_primary = st.selectbox('Site of Primary STS', ['left thigh', 'right thigh', 'right parascapusular', 'left biceps', 'right buttock', 'parascapusular', 'left buttock'])
     treatment = st.selectbox('Treatment', ['Radiotherapy + Surgery', 'Radiotherapy + Surgery + Chemotherapy', 'Surgery + Chemotherapy'])
 
+    # Create a list of features with user inputs
     input_data = np.array([sex, age, grade, histological_type, mskcc_type, site_of_primary, treatment])
 
-    # Encode categorical features into numerical values
+    # Encode categorical features into numerical values using LabelEncoder
     label_encoder_sex = LabelEncoder()
     label_encoder_grade = LabelEncoder()
     label_encoder_histological_type = LabelEncoder()
@@ -258,10 +258,16 @@ def prediction_page():
     input_data[5] = label_encoder_site_of_primary.fit_transform([site_of_primary])[0]
     input_data[6] = label_encoder_treatment.fit_transform([treatment])[0]
 
+    # Ensure input_data has 31 features (you need to add the missing features or ensure your model
+    # was trained with these features) by including default values for missing features
+    missing_features = len(full_columns) - len(input_data)
+    if missing_features > 0:
+        input_data = np.append(input_data, np.zeros(missing_features))  # Add zeros for missing features
+    
     # Reshape to 2D for the scaler
     input_data = input_data.reshape(1, -1)
 
-    # Scale the input data
+    # Scale the input data (make sure your scaler was trained with the same features)
     input_data = scaler.transform(input_data)
 
     # Make prediction using the selected model
@@ -273,6 +279,7 @@ def prediction_page():
     predicted_class = np.argmax(prediction, axis=1)
 
     st.write(f"Predicted Class: {label_encoder.inverse_transform(predicted_class)}")
+
 
 if __name__ == "__main__":
     main_page()
