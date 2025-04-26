@@ -4,12 +4,47 @@ import numpy as np
 import streamlit as st
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.model_selection import train_test_split
-from tensorflow.keras.models import Sequential, load_model
-from tensorflow.keras.layers import Dense, Conv1D, LSTM, GlobalMaxPooling1D, Reshape
-from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import EarlyStopping
+import joblib
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Dropout, LSTM, Conv1D, GlobalMaxPooling1D, Reshape
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.models import load_model
+import hashlib
 
-# --- Model Building Functions ---
+# --- Helper Functions for User Authentication ---
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def check_password(stored_password, input_password):
+    return stored_password == hash_password(input_password)
+
+# --- Helper Functions for User Registration ---
+users_db = {
+    "admin": hash_password("adminpassword")  # Example stored user (admin)
+}
+
+def register_user(username, password):
+    if username in users_db:
+        return False  # User already exists
+    users_db[username] = hash_password(password)
+    return True
+
+# --- Helper Function for Training ---
+def load_label_encoder():
+    return joblib.load('label_encoder.pkl')
+
+def load_feature_columns():
+    return joblib.load('input_columns.pkl')
+
+def load_models():
+    models = {
+        'Simple ANN': load_model('Simple ANN_model.h5'),
+        'CNN': load_model('CNN1_model.h5'),
+        'LSTM': load_model('LSTM1_model.h5')
+    }
+    return models
+
 def build_simple_ann(input_shape):
     model = Sequential([
         Dense(64, activation='relu', input_shape=(input_shape,)),
@@ -37,9 +72,52 @@ def build_lstm(input_shape):
     ])
     return model
 
-# --- Train Page Function ---
+# --- Main Function ---
+def main_page():
+    st.title('Medical Prediction App')
+
+    # User input for login
+    if 'logged_in' not in st.session_state or not st.session_state.logged_in:
+        login_page()
+    else:
+        st.sidebar.write(f"Logged in as: {st.session_state.username}")
+        if st.sidebar.button('Logout'):
+            st.session_state.logged_in = False
+            del st.session_state.username
+            st.success("Logged out successfully!")
+            st.experimental_rerun()  # Reload the page
+
+        st.header('Main Content')
+
+        # Tab selection for training and prediction
+        selected_tab = st.radio('Choose an option', ['Train Model', 'Make Prediction'])
+
+        if selected_tab == 'Train Model':
+            train_page()
+        elif selected_tab == 'Make Prediction':
+            prediction_page()
+
+# --- Login Page Function ---
+def login_page():
+    st.title('Login Page')
+
+    # User input for login
+    username = st.text_input('Username')
+    password = st.text_input('Password', type='password')
+
+    # Login button
+    if st.button('Login'):
+        if username in users_db and check_password(users_db[username], password):
+            st.session_state.logged_in = True
+            st.session_state.username = username
+            st.success(f"Welcome back, {username}!")
+            st.experimental_rerun()  # Reload the page
+        else:
+            st.error('Invalid credentials!')
+
+# --- Train Model Page ---
 def train_page():
-    st.title('Train Model')
+    st.subheader('Train a Model')
 
     # Upload dataset
     file = st.file_uploader("Upload CSV dataset", type="csv")
@@ -49,10 +127,11 @@ def train_page():
         st.write("Dataset preview:")
         st.write(df.head())
 
-        # Preprocess dataset
+        # Drop 'Patient ID' column if it exists
         if 'Patient ID' in df.columns:
             df.drop('Patient ID', axis=1, inplace=True)
 
+        # Preprocess dataset
         X = df.drop(columns=['Status (NED, AWD, D)'])  # Assuming 'Status' is the target column
         y = df['Status (NED, AWD, D)']
 
@@ -71,7 +150,7 @@ def train_page():
         X_test = scaler.transform(X_test)
 
         # Save the scaler for later use
-        st.session_state.scaler = scaler  # Save scaler in session state
+        joblib.dump(scaler, 'scaler.pkl')
 
         # Convert target variable to one-hot encoding for multi-class classification
         y_train = pd.get_dummies(y_train)
@@ -107,70 +186,52 @@ def train_page():
         st.subheader('Model Summary')
         model.summary()
 
-# --- Prediction Function ---
-def predict(model, user_input, full_columns, scaler):
-    # Prepare the user input for prediction
-    input_data = pd.DataFrame([user_input], columns=full_columns)
-    
+        # Option to download the trained model
+        st.download_button(
+            label="Download Trained Model",
+            data=open(f'{model_choice}_model.h5', 'rb').read(),
+            file_name=f'{model_choice}_model.h5',
+            mime="application/octet-stream"
+        )
+
+# --- Prediction Page ---
+def prediction_page():
+    st.subheader('Make Prediction')
+
+    # Load models
+    models = load_models()
+
+    # Load other components like columns, label encoder, etc.
+    full_columns = load_feature_columns()  # Define or load the feature columns
+    label_encoder = load_label_encoder()  # Load label encoder
+    scaler = joblib.load('scaler.pkl')  # Load the scaler for Age column scaling
+
+    # User input for prediction
+    sex = st.selectbox('Sex', ['Male', 'Female'])
+    age = st.number_input('Age', min_value=0, max_value=120)
+    grade = st.selectbox('Grade', ['Intermediate', 'High'])
+    histological_type = st.selectbox('Histological Type', ['pleiomorphic leiomyosarcoma', 'malignant solitary fibrous tumor', 'sclerosing epithelioid fibrosarcoma', 'myxoid fibrosarcoma', 'undifferentiated - pleiomorphic', 'synovial sarcoma', 'undifferentiated pleomorphic liposarcoma', 'epithelioid sarcoma', 'poorly differentiated synovial sarcoma', 'pleiomorphic spindle cell undifferentiated', 'pleomorphic sarcoma', 'myxofibrosarcoma', 'leiomyosarcoma'])
+    mskcc_type = st.selectbox('MSKCC Type', ['MFH', 'Synovial sarcoma', 'Leiomyosarcoma'])
+    site_of_primary = st.selectbox('Site of Primary STS', ['left thigh', 'right thigh', 'right parascapusular', 'left biceps', 'right buttock', 'parascapusular', 'left buttock'])
+    treatment = st.selectbox('Treatment', ['Radiotherapy + Surgery', 'Radiotherapy + Surgery + Chemotherapy', 'Surgery + Chemotherapy'])
+
+    input_data = np.array([sex, age, grade, histological_type, mskcc_type, site_of_primary, treatment])
+
+    # Preprocess the input data
+    input_data = input_data.reshape(1, -1)
+
     # Scale the input data
-    input_data_scaled = scaler.transform(input_data)
+    input_data = scaler.transform(input_data)
 
-    # Predict using the model
-    prediction = model.predict(input_data_scaled)
+    # Make prediction using the selected model
+    model_choice = st.selectbox('Select a Model', list(models.keys()))
+    model = models[model_choice]
 
-    # Get the class with the highest probability
+    # Make prediction and display result
+    prediction = model.predict(input_data)
     predicted_class = np.argmax(prediction, axis=1)
 
-    return predicted_class
+    st.write(f"Predicted Class: {label_encoder.inverse_transform(predicted_class)}")
 
-# --- Main Page Function ---
-def main_page():
-    st.title('Medical Prediction App')
-
-    if 'scaler' not in st.session_state:
-        st.session_state.scaler = None  # Initialize scaler if not set yet
-
-    # Sidebar to navigate to the Train Page and Prediction
-    st.sidebar.title('Navigation')
-    page = st.sidebar.radio('Choose Page:', ['Train Model', 'Make Prediction'])
-
-    if page == 'Train Model':
-        train_page()  # Navigate to train model page
-    elif page == 'Make Prediction':
-        st.header('Enter Patient Information for Prediction')
-
-        # User input form for prediction
-        if 'scaler' in st.session_state and st.session_state.scaler is not None:
-            sex = st.selectbox('Sex', ['Male', 'Female'])
-            age = st.number_input('Age', min_value=0, max_value=120)
-            grade = st.selectbox('Grade', ['Intermediate', 'High'])
-            histological_type = st.selectbox('Histological Type', ['pleiomorphic leiomyosarcoma', 'malignant solitary fibrous tumor', 'sclerosing epithelioid fibrosarcoma', 'myxoid fibrosarcoma', 'undifferentiated - pleiomorphic', 'synovial sarcoma', 'undifferentiated pleomorphic', 'epithelioid sarcoma', 'poorly differentiated synovial sarcoma', 'pleiomorphic spindle cell undifferentiated', 'pleomorphic sarcoma', 'myxofibrosarcoma', 'leiomyosarcoma'])
-            mskcc_type = st.selectbox('MSKCC Type', ['MFH', 'Synovial sarcoma', 'Leiomyosarcoma'])
-            site_of_primary = st.selectbox('Site of Primary STS', ['left thigh', 'right thigh', 'right parascapusular', 'left biceps', 'right buttock', 'parascapusular', 'left buttock'])
-            treatment = st.selectbox('Treatment', ['Radiotherapy + Surgery', 'Radiotherapy + Surgery + Chemotherapy', 'Surgery + Chemotherapy'])
-
-            user_input = {
-                'Sex': sex,
-                'Age': age,
-                'Grade': grade,
-                'Histological type': histological_type,
-                'MSKCC type': mskcc_type,
-                'Site of primary STS': site_of_primary,
-                'Treatment': treatment
-            }
-
-            model_choice = st.selectbox('Choose Trained Model', ['Simple ANN', 'CNN', 'LSTM'])
-
-            if st.button('Predict'):
-                model = load_model(f'{model_choice}_model.h5')
-
-                # Assuming the columns are defined during training
-                full_columns = ['Sex', 'Age', 'Grade', 'Histological type', 'MSKCC type', 'Site of primary STS', 'Treatment']
-
-                prediction = predict(model, user_input, full_columns, st.session_state.scaler)
-
-                # Show the prediction result
-                st.subheader(f'Prediction: {prediction}')
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main_page()
