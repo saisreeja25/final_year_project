@@ -11,7 +11,7 @@ from sklearn.preprocessing import StandardScaler
 def load_models():
     models = {
         'Simple ANN': load_model('Simple ANN1_model.h5'),
-        'Deep ANN': load_model('Deep ANN1_model.h5'),
+        'Deep ANN': load_model('Deep ANN_model.h5'),
         'CNN': load_model('CNN1_model.h5'),
         'LSTM': load_model('LSTM1_model.h5')
     }
